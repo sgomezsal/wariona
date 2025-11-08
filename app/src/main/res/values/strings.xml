@@ -238,6 +238,8 @@
 	<string name="button_stop">Stop</string>
 	<string name="button_resume">Resume</string>
 	<string name="button_finish">Finish</string>
+	<string name="tap_to_record">Tap to record</string>
+	<string name="tap_to_stop">Tap to stop</string>
 
 	<!-- Shown in the 'About' window of the app. -->
 	<string name="about_body"><![CDATA[

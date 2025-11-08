@@ -46,7 +46,7 @@
         </receiver>
 
         <activity
-            android:name=".app.main.MainActivity"
+            android:name=".app.main.MainActivityMinimal"
             android:launchMode="singleTask"
             android:exported="true"
             android:screenOrientation="portrait">
@@ -55,14 +55,20 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
         </activity>
         <activity
-            android:name=".app.records.RecordsActivity"
+            android:name=".app.records.RecordsActivityMinimal"
             android:screenOrientation="portrait" />
+        <!-- Keep original activities for reference -->
+        <activity
+            android:name=".app.main.MainActivity"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+        <activity
+            android:name=".app.records.RecordsActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
         <activity
             android:name=".app.settings.SettingsActivity"
             android:screenOrientation="portrait" />

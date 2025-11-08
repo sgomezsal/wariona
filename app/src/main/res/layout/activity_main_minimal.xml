@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimalist Main Activity Layout
+  Simple white background with centered animated circle
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white"
+    tools:context="com.dimowner.audiorecorder.app.main.MainActivity">
+
+    <!-- Records list button - top right -->
+    <ImageButton
+        android:id="@+id/btn_records"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/records"
+        android:src="@drawable/ic_list"
+        android:tint="@android:color/black"
+        tools:ignore="ContentDescription" />
+
+    <!-- Recording time display - top center -->
+    <TextView
+        android:id="@+id/txt_recording_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="24dp"
+        android:text="00:00"
+        android:textColor="@android:color/black"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="02:34"
+        tools:visibility="visible" />
+
+    <!-- Centered animated circle -->
+    <com.dimowner.audiorecorder.app.widget.AnimatedCircleView
+        android:id="@+id/animated_circle"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_gravity="center"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <!-- Tap to record hint text -->
+    <TextView
+        android:id="@+id/txt_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="48dp"
+        android:text="@string/tap_to_record"
+        android:textColor="@android:color/black"
+        android:textSize="16sp"
+        android:alpha="0.6"
+        tools:text="Tap to record" />
+
+</FrameLayout>
+
