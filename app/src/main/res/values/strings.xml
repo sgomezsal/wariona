@@ -291,4 +291,8 @@
 	</string-array>
 
 	<string name="app_widget_description">Start recording widget</string>
+	<string name="accessibility_service_description">Detects volume button press patterns to start/stop audio recording. Press volume button 4 times quickly to toggle recording.</string>
+	<string name="enable_button_pattern_service">Enable Button Pattern Detection</string>
+	<string name="button_pattern_service_settings">Button Pattern Service Settings</string>
+	<string name="button_pattern_instructions">To use button pattern recording:\n\n1. Enable the accessibility service\n2. Press volume button (up or down) 4 times quickly (within 2 seconds) to start recording\n3. Press 4 times again to stop recording\n\nThis works even when the app is closed.</string>
 </resources>

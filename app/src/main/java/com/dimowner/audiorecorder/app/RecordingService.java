@@ -52,6 +52,7 @@ import com.dimowner.audiorecorder.data.RecordDataSource;
 import com.dimowner.audiorecorder.data.database.LocalRepository;
 import com.dimowner.audiorecorder.data.database.Record;
 import com.dimowner.audiorecorder.exception.AppException;
+import com.dimowner.audiorecorder.exception.CantCreateFileException;
 import com.dimowner.audiorecorder.exception.ErrorParser;
 import com.dimowner.audiorecorder.exception.RecorderInitException;
 import com.dimowner.audiorecorder.util.AndroidUtils;
@@ -78,6 +79,7 @@ public class RecordingService extends Service {
 
 	public static final String ACTION_STOP_RECORDING = "ACTION_STOP_RECORDING";
 	public static final String ACTION_PAUSE_RECORDING = "ACTION_PAUSE_RECORDING";
+	public static final String ACTION_TOGGLE_RECORDING = "ACTION_TOGGLE_RECORDING";
 
 	private static final int NOTIF_ID = 101;
 	private NotificationManager notificationManager;
@@ -96,6 +98,7 @@ public class RecordingService extends Service {
 	private ColorMap colorMap;
 	private boolean started = false;
 	private FileRepository fileRepository;
+	private SilenceDetector silenceDetector;
 
 	public RecordingService() {
 	}
@@ -119,19 +122,30 @@ public class RecordingService extends Service {
 		colorMap = ARApplication.getInjector().provideColorMap(getApplicationContext());
 		fileRepository = ARApplication.getInjector().provideFileRepository(getApplicationContext());
 
+		// Initialize silence detector
+		silenceDetector = new SilenceDetector();
+
 		appRecorderCallback = new AppRecorderCallback() {
 			boolean checkHasSpace = true;
 
 			@Override public void onRecordingStarted(File file) {
+				// Enable silence detection when recording starts
+				silenceDetector.enable();
 				updateNotificationResume();
 			}
 			@Override public void onRecordingPaused() {
+				// Reset silence detector on pause
+				silenceDetector.reset();
 				updateNotificationPause();
 			}
 			@Override public void onRecordingResumed() {
+				// Reset silence detector on resume
+				silenceDetector.reset();
 				updateNotificationResume();
 			}
 			@Override public void onRecordingStopped(File file, Record rec) {
+				// Disable silence detection when recording stops
+				silenceDetector.disable();
 				if (rec != null && rec.getDuration()/1000 < AppConstants.DECODE_DURATION && !rec.isWaveformProcessed()) {
 					DecodeService.Companion.startNotification(getApplicationContext(), rec.getId());
 				}
@@ -140,6 +154,22 @@ public class RecordingService extends Service {
 
 			@Override
 			public void onRecordingProgress(long mills, int amp) {
+				// ===== SILENCE DETECTION =====
+				// Check if silence is detected and stop recording automatically
+				// This monitors audio amplitude continuously during recording
+				// Adjust threshold and duration in SilenceDetector.java
+				if (silenceDetector.checkSilence(amp, System.currentTimeMillis())) {
+					Timber.d("Automatic stop due to silence detection");
+					stopRecording();
+					AndroidUtils.runOnUIThread(() -> {
+						Toast.makeText(getApplicationContext(), 
+								"Recording stopped due to silence", 
+								Toast.LENGTH_SHORT).show();
+					});
+					return;
+				}
+				// ===== END SILENCE DETECTION =====
+
 				try {
 					if (mills % 10000 < 1000) {
 						if (checkHasSpace && !fileRepository.hasAvailableSpace(getApplicationContext())) {
@@ -220,10 +250,35 @@ public class RecordingService extends Service {
 							appRecorder.pauseRecording();
 						}
 						break;
+					case ACTION_TOGGLE_RECORDING:
+						toggleRecording();
+						break;
 				}
 			}
 		}
 		return super.onStartCommand(intent, flags, startId);
+	}
+
+	private void toggleRecording() {
+		if (appRecorder.isRecording()) {
+			// Stop recording
+			stopRecording();
+		} else {
+			// Start recording
+			if (!started) {
+				startForegroundService();
+			}
+			try {
+				String path = fileRepository.provideRecordFile().getAbsolutePath();
+				startRecording(path);
+			} catch (CantCreateFileException e) {
+				Timber.e(e, "Failed to start recording from button pattern");
+				showError(ErrorParser.parseException(e));
+				if (started) {
+					stopForegroundService();
+				}
+			}
+		}
 	}
 
 	private void stopRecording() {
@@ -320,9 +375,17 @@ public class RecordingService extends Service {
 	@SuppressLint("WrongConstant")
 	private PendingIntent createContentIntent() {
 		// Create notification default intent.
-		Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-		intent.setFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
-		return PendingIntent.getActivity(getApplicationContext(), 0, intent, AppConstants.PENDING_INTENT_FLAGS);
+		try {
+			Intent intent = new Intent(getApplicationContext(), 
+					Class.forName("com.dimowner.audiorecorder.app.main.MainActivityMinimal"));
+			intent.setFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
+			return PendingIntent.getActivity(getApplicationContext(), 0, intent, AppConstants.PENDING_INTENT_FLAGS);
+		} catch (ClassNotFoundException e) {
+			// Fallback to original MainActivity if MainActivityMinimal doesn't exist
+			Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+			intent.setFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
+			return PendingIntent.getActivity(getApplicationContext(), 0, intent, AppConstants.PENDING_INTENT_FLAGS);
+		}
 	}
 
 	private void stopForegroundService() {

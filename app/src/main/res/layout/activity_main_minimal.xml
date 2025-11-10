@@ -23,6 +23,20 @@
         android:tint="@android:color/black"
         tools:ignore="ContentDescription" />
 
+    <!-- Button pattern settings button - top left (small, subtle) -->
+    <ImageButton
+        android:id="@+id/btn_button_pattern_settings"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Button Pattern Settings"
+        android:src="@drawable/ic_settings"
+        android:tint="@android:color/black"
+        android:alpha="0.5"
+        tools:ignore="ContentDescription" />
+
     <!-- Recording time display - top center -->
     <TextView
         android:id="@+id/txt_recording_time"

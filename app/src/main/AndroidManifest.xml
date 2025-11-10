@@ -18,6 +18,8 @@
         android:minSdkVersion="33" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -96,6 +98,11 @@
         <activity
             android:name=".app.TransparentRecordingActivity"
             android:theme="@style/Theme.Transparent" />
+        <activity
+            android:name=".app.buttonpattern.ButtonPatternSettingsActivity"
+            android:screenOrientation="portrait"
+            android:exported="true"
+            android:label="@string/button_pattern_service_settings" />
 
         <service
             android:name=".app.RecordingService"
@@ -117,6 +124,17 @@
             android:name=".app.moverecords.MoveRecordsService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".app.buttonpattern.ButtonPatternService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/button_pattern_service_config" />
+        </service>
 
         <receiver android:name=".WidgetReceiver" />
         <receiver android:name=".app.RecordingService$StopRecordingReceiver" />

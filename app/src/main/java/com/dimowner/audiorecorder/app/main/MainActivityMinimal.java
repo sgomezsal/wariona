@@ -22,6 +22,7 @@ import com.dimowner.audiorecorder.ARApplication;
 import com.dimowner.audiorecorder.ColorMap;
 import com.dimowner.audiorecorder.R;
 import com.dimowner.audiorecorder.app.RecordingService;
+import com.dimowner.audiorecorder.app.buttonpattern.ButtonPatternSettingsActivity;
 import com.dimowner.audiorecorder.app.records.RecordsActivityMinimal;
 import com.dimowner.audiorecorder.app.widget.AnimatedCircleView;
 import com.dimowner.audiorecorder.data.FileRepository;
@@ -41,6 +42,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 	private TextView txtRecordingTime;
 	private TextView txtHint;
 	private ImageButton btnRecords;
+	private ImageButton btnButtonPatternSettings;
 
 	private MainContract.UserActionsListener presenter;
 	private ColorMap colorMap;
@@ -63,6 +65,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 		txtRecordingTime = findViewById(R.id.txt_recording_time);
 		txtHint = findViewById(R.id.txt_hint);
 		btnRecords = findViewById(R.id.btn_records);
+		btnButtonPatternSettings = findViewById(R.id.btn_button_pattern_settings);
 
 		// Set white background
 		getWindow().getDecorView().setBackgroundColor(getResources().getColor(android.R.color.white));
@@ -78,6 +81,10 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 
 		btnRecords.setOnClickListener(v -> {
 			startActivity(RecordsActivityMinimal.getStartIntent(getApplicationContext()));
+		});
+
+		btnButtonPatternSettings.setOnClickListener(v -> {
+			startActivity(new Intent(getApplicationContext(), ButtonPatternSettingsActivity.class));
 		});
 
 		presenter = ARApplication.getInjector().provideMainPresenter(getApplicationContext());
