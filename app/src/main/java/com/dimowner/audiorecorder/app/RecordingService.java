@@ -99,6 +99,7 @@ public class RecordingService extends Service {
 	private boolean started = false;
 	private FileRepository fileRepository;
 	private SilenceDetector silenceDetector;
+	private AudioUploader audioUploader;
 
 	public RecordingService() {
 	}
@@ -124,6 +125,9 @@ public class RecordingService extends Service {
 
 		// Initialize silence detector
 		silenceDetector = new SilenceDetector();
+		
+		// Initialize audio uploader
+		audioUploader = new AudioUploader();
 
 		appRecorderCallback = new AppRecorderCallback() {
 			boolean checkHasSpace = true;
@@ -146,6 +150,18 @@ public class RecordingService extends Service {
 			@Override public void onRecordingStopped(File file, Record rec) {
 				// Disable silence detection when recording stops
 				silenceDetector.disable();
+				
+				// ===== AUTOMATIC FILE UPLOAD =====
+				// Upload the recorded file to backend API in background
+				if (file != null && file.exists()) {
+					recordingsTasks.postRunnable(() -> {
+						audioUploader.uploadAudioFile(getApplicationContext(), file);
+					});
+				} else {
+					Timber.w("Recording stopped but file is null or doesn't exist");
+				}
+				// ===== END AUTOMATIC FILE UPLOAD =====
+				
 				if (rec != null && rec.getDuration()/1000 < AppConstants.DECODE_DURATION && !rec.isWaveformProcessed()) {
 					DecodeService.Companion.startNotification(getApplicationContext(), rec.getId());
 				}
