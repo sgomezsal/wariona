@@ -99,7 +99,6 @@ public class RecordingService extends Service {
 	private boolean started = false;
 	private FileRepository fileRepository;
 	private SilenceDetector silenceDetector;
-	private AudioUploader audioUploader;
 
 	public RecordingService() {
 	}
@@ -125,9 +124,6 @@ public class RecordingService extends Service {
 
 		// Initialize silence detector
 		silenceDetector = new SilenceDetector();
-		
-		// Initialize audio uploader
-		audioUploader = new AudioUploader();
 
 		appRecorderCallback = new AppRecorderCallback() {
 			boolean checkHasSpace = true;
@@ -151,16 +147,16 @@ public class RecordingService extends Service {
 				// Disable silence detection when recording stops
 				silenceDetector.disable();
 				
-				// ===== AUTOMATIC FILE UPLOAD =====
-				// Upload the recorded file to backend API in background
+				// ===== AUTOMATIC FILE UPLOAD AND PLAYBACK =====
+				// Send the recorded file to Wariona backend and play the response
+				// Uses Kotlin coroutines for async operations (Dispatchers.IO)
 				if (file != null && file.exists()) {
-					recordingsTasks.postRunnable(() -> {
-						audioUploader.uploadAudioFile(getApplicationContext(), file);
-					});
+					// Use WarionaAudioPlayer with coroutines for better async handling
+					WarionaAudioPlayer.INSTANCE.sendAndPlayAudioAsync(getApplicationContext(), file);
 				} else {
 					Timber.w("Recording stopped but file is null or doesn't exist");
 				}
-				// ===== END AUTOMATIC FILE UPLOAD =====
+				// ===== END AUTOMATIC FILE UPLOAD AND PLAYBACK =====
 				
 				if (rec != null && rec.getDuration()/1000 < AppConstants.DECODE_DURATION && !rec.isWaveformProcessed()) {
 					DecodeService.Companion.startNotification(getApplicationContext(), rec.getId());
@@ -406,9 +402,18 @@ public class RecordingService extends Service {
 
 	private void stopForegroundService() {
 		appRecorder.removeRecordingCallback(appRecorderCallback);
+		// Clean up Wariona audio player
+		WarionaAudioPlayer.INSTANCE.cleanup();
 		stopForeground(true);
 		stopSelf();
 		started = false;
+	}
+	
+	@Override
+	public void onDestroy() {
+		super.onDestroy();
+		// Clean up Wariona audio player
+		WarionaAudioPlayer.INSTANCE.cleanup();
 	}
 
 	@SuppressLint("WrongConstant")

@@ -21,14 +21,21 @@ import android.widget.Toast;
 import com.dimowner.audiorecorder.ARApplication;
 import com.dimowner.audiorecorder.ColorMap;
 import com.dimowner.audiorecorder.R;
+import com.dimowner.audiorecorder.app.AppRecorder;
+import com.dimowner.audiorecorder.app.AppRecorderCallback;
 import com.dimowner.audiorecorder.app.RecordingService;
 import com.dimowner.audiorecorder.app.buttonpattern.ButtonPatternSettingsActivity;
+import com.dimowner.audiorecorder.app.gtd.GtdAssistantService;
 import com.dimowner.audiorecorder.app.records.RecordsActivityMinimal;
 import com.dimowner.audiorecorder.app.widget.AnimatedCircleView;
 import com.dimowner.audiorecorder.data.FileRepository;
+import com.dimowner.audiorecorder.data.database.Record;
+import com.dimowner.audiorecorder.exception.AppException;
 import com.dimowner.audiorecorder.exception.CantCreateFileException;
 import com.dimowner.audiorecorder.exception.ErrorParser;
 import com.dimowner.audiorecorder.util.TimeUtils;
+
+import java.io.File;
 
 import androidx.annotation.NonNull;
 
@@ -41,13 +48,19 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 	private AnimatedCircleView animatedCircle;
 	private TextView txtRecordingTime;
 	private TextView txtHint;
+	private TextView txtGtdTranscription;
+	private TextView txtGtdResponse;
 	private ImageButton btnRecords;
 	private ImageButton btnButtonPatternSettings;
+	private ImageButton btnGtdMode;
 
 	private MainContract.UserActionsListener presenter;
 	private ColorMap colorMap;
 	private FileRepository fileRepository;
+	private GtdAssistantService gtdAssistantService;
 	private boolean isRecording = false;
+	private boolean isGtdMode = false;
+	private File currentRecordingFile;
 
 	public static Intent getStartIntent(Context context) {
 		return new Intent(context, MainActivityMinimal.class);
@@ -64,8 +77,11 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 		animatedCircle = findViewById(R.id.animated_circle);
 		txtRecordingTime = findViewById(R.id.txt_recording_time);
 		txtHint = findViewById(R.id.txt_hint);
+		txtGtdTranscription = findViewById(R.id.txt_gtd_transcription);
+		txtGtdResponse = findViewById(R.id.txt_gtd_response);
 		btnRecords = findViewById(R.id.btn_records);
 		btnButtonPatternSettings = findViewById(R.id.btn_button_pattern_settings);
+		btnGtdMode = findViewById(R.id.btn_gtd_mode);
 
 		// Set white background
 		getWindow().getDecorView().setBackgroundColor(getResources().getColor(android.R.color.white));
@@ -87,8 +103,105 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 			startActivity(new Intent(getApplicationContext(), ButtonPatternSettingsActivity.class));
 		});
 
+		// Initialize GTD Assistant Service
+		gtdAssistantService = new GtdAssistantService();
+		gtdAssistantService.setListener(new GtdAssistantService.GtdAssistantListener() {
+			@Override
+			public void onListening() {
+				runOnUiThread(() -> {
+					txtHint.setText(R.string.gtd_listening);
+				});
+			}
+
+			@Override
+			public void onProcessing() {
+				runOnUiThread(() -> {
+					txtHint.setText(R.string.gtd_processing);
+				});
+			}
+
+			@Override
+			public void onSpeaking() {
+				runOnUiThread(() -> {
+					txtHint.setText(R.string.gtd_speaking);
+				});
+			}
+
+			@Override
+			public void onComplete() {
+				runOnUiThread(() -> {
+					updateGtdModeHint();
+					// Clean up recording file if in GTD mode
+					if (isGtdMode && currentRecordingFile != null && currentRecordingFile.exists()) {
+						currentRecordingFile.delete();
+						currentRecordingFile = null;
+					}
+				});
+			}
+
+			@Override
+			public void onError(String message) {
+				runOnUiThread(() -> {
+					showError(message);
+					updateGtdModeHint();
+				});
+			}
+
+			@Override
+			public void onTextResponse(String transcription, String responseText) {
+				runOnUiThread(() -> {
+					if (transcription != null && !transcription.isEmpty()) {
+						txtGtdTranscription.setText(getString(R.string.gtd_transcription) + " " + transcription);
+						txtGtdTranscription.setVisibility(View.VISIBLE);
+					}
+					if (responseText != null && !responseText.isEmpty()) {
+						txtGtdResponse.setText(getString(R.string.gtd_response) + " " + responseText);
+						txtGtdResponse.setVisibility(View.VISIBLE);
+					}
+				});
+			}
+		});
+
+		// GTD Mode toggle
+		btnGtdMode.setOnClickListener(v -> {
+			isGtdMode = !isGtdMode;
+			updateGtdModeHint();
+			// Clear text responses when toggling
+			txtGtdTranscription.setVisibility(View.GONE);
+			txtGtdResponse.setVisibility(View.GONE);
+		});
+
 		presenter = ARApplication.getInjector().provideMainPresenter(getApplicationContext());
 		fileRepository = ARApplication.getInjector().provideFileRepository(getApplicationContext());
+		
+		// Add callback to intercept recording stop for GTD mode
+		AppRecorder appRecorder = ARApplication.getInjector().provideAppRecorder(getApplicationContext());
+		appRecorder.addRecordingCallback(new AppRecorderCallback() {
+			@Override
+			public void onRecordingStarted(File file) {
+				currentRecordingFile = file;
+			}
+
+			@Override
+			public void onRecordingPaused() {}
+
+			@Override
+			public void onRecordingResumed() {}
+
+			@Override
+			public void onRecordingProgress(long mills, int amp) {}
+
+			@Override
+			public void onRecordingStopped(File file, Record rec) {
+				// If in GTD mode, send to GTD assistant instead of saving
+				if (isGtdMode && file != null && file.exists()) {
+					gtdAssistantService.sendAudioAndPlayResponse(getApplicationContext(), file);
+				}
+			}
+
+			@Override
+			public void onError(AppException throwable) {}
+		});
 
 		// Request permissions if needed
 		checkPermissions();
@@ -113,6 +226,31 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 		if (presenter != null) {
 			presenter.unbindView();
 		}
+		if (gtdAssistantService != null) {
+			gtdAssistantService.cleanup();
+		}
+	}
+	
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		if (gtdAssistantService != null) {
+			gtdAssistantService.cleanup();
+		}
+	}
+	
+	private void updateGtdModeHint() {
+		if (isGtdMode) {
+			if (!isRecording) {
+				txtHint.setText(R.string.gtd_tap_to_talk);
+			}
+			btnGtdMode.setAlpha(1.0f);
+		} else {
+			if (!isRecording) {
+				txtHint.setText(R.string.tap_to_record);
+			}
+			btnGtdMode.setAlpha(0.7f);
+		}
 	}
 
 	private void startRecording() {
@@ -131,6 +269,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 	public void startRecordingService() {
 		try {
 			String path = fileRepository.provideRecordFile().getAbsolutePath();
+			currentRecordingFile = new File(path);
 			Intent intent = new Intent(getApplicationContext(), RecordingService.class);
 			intent.setAction(RecordingService.ACTION_START_RECORDING_SERVICE);
 			intent.putExtra(RecordingService.EXTRAS_KEY_RECORD_PATH, path);

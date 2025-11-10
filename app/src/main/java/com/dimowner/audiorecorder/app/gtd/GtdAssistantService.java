@@ -1,19 +1,16 @@
 /*
  * Copyright 2024
- * Audio Uploader
- * Handles automatic upload of recorded audio files to backend API
- * and plays the audio response directly
+ * GTD Assistant Service
+ * Handles voice interaction with GTD assistant backend
  */
 
-package com.dimowner.audiorecorder.app;
+package com.dimowner.audiorecorder.app.gtd;
 
 import android.content.Context;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
-import android.widget.Toast;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -34,20 +31,25 @@ import java.util.concurrent.TimeUnit;
 import timber.log.Timber;
 
 /**
- * Utility class for uploading audio files to the backend API and playing the response.
+ * Service for interacting with the GTD Assistant backend.
  * 
- * Uploads are performed in the background using OkHttp.
- * The response is a binary audio/mpeg stream that is played directly using MediaPlayer.
- * Temporary files are automatically deleted after playback.
+ * Flow:
+ * 1. Record audio (file provided)
+ * 2. Send to backend API
+ * 3. Receive binary audio/mpeg response
+ * 4. Save to temporary file
+ * 5. Play audio
+ * 6. Delete temporary file
  */
-public class AudioUploader {
+public class GtdAssistantService {
 
-	private static final String TAG = "Wariona";
+	private static final String TAG = "GtdAssistantService";
 	
-	// Backend API endpoint - updated to /talk
-	private static final String UPLOAD_URL = "http://65.21.54.108:8000/talk";
+	// Backend API endpoint - CONFIGURE YOUR SERVER IP HERE
+	// TODO: Make this configurable via settings or build config
+	private static final String GTD_API_URL = "http://65.21.54.108:8000/talk";
 	
-	// Request timeout settings (in seconds) - extended for processing
+	// Request timeout settings (in seconds)
 	private static final int CONNECT_TIMEOUT = 60;
 	private static final int READ_TIMEOUT = 120;
 	private static final int WRITE_TIMEOUT = 120;
@@ -66,12 +68,48 @@ public class AudioUploader {
 	private final Handler mainHandler;
 	private MediaPlayer mediaPlayer;
 	private File tempAudioFile;
+	private GtdAssistantListener listener;
 	
 	/**
-	 * Constructor - creates a new AudioUploader instance
+	 * Listener interface for GTD Assistant events
 	 */
-	public AudioUploader() {
-		// Create OkHttpClient with timeout settings
+	public interface GtdAssistantListener {
+		/**
+		 * Called when the service starts recording
+		 */
+		void onListening();
+		
+		/**
+		 * Called when the audio is being sent and processed
+		 */
+		void onProcessing();
+		
+		/**
+		 * Called when the response audio starts playing
+		 */
+		void onSpeaking();
+		
+		/**
+		 * Called when the interaction completes
+		 */
+		void onComplete();
+		
+		/**
+		 * Called when an error occurs
+		 */
+		void onError(String message);
+		
+		/**
+		 * Called with transcription and response text from headers
+		 */
+		void onTextResponse(String transcription, String responseText);
+	}
+	
+	/**
+	 * Constructor
+	 */
+	public GtdAssistantService() {
+		// Create OkHttpClient with extended timeouts for processing
 		httpClient = new OkHttpClient.Builder()
 				.connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
 				.readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
@@ -83,26 +121,34 @@ public class AudioUploader {
 	}
 	
 	/**
-	 * Upload an audio file to the backend API and play the audio response.
-	 * 
-	 * @param context Application context (for showing Toast messages)
-	 * @param audioFile The audio file to upload
+	 * Set the listener for GTD Assistant events
 	 */
-	public void uploadAudioFile(Context context, File audioFile) {
+	public void setListener(GtdAssistantListener listener) {
+		this.listener = listener;
+	}
+	
+	/**
+	 * Send audio file to GTD Assistant and play the response
+	 * 
+	 * @param context Application context
+	 * @param audioFile The recorded audio file to send
+	 */
+	public void sendAudioAndPlayResponse(Context context, File audioFile) {
 		if (audioFile == null || !audioFile.exists()) {
-			Timber.e("Audio file is null or does not exist");
-			showToast(context, "Upload failed: File not found");
+			notifyError("Audio file not found");
 			return;
 		}
 		
 		if (!audioFile.canRead()) {
-			Timber.e("Cannot read audio file: %s", audioFile.getAbsolutePath());
-			showToast(context, "Upload failed: Cannot read file");
+			notifyError("Cannot read audio file");
 			return;
 		}
 		
-		Timber.d("Starting upload for file: %s (size: %d bytes)", 
+		Timber.d("Sending audio to GTD Assistant: %s (size: %d bytes)", 
 				audioFile.getName(), audioFile.length());
+		
+		// Notify listening state
+		notifyListening();
 		
 		// Create multipart request body
 		RequestBody fileBody = RequestBody.create(audioFile, AUDIO_MEDIA_TYPE);
@@ -113,7 +159,7 @@ public class AudioUploader {
 		
 		// Create HTTP request
 		Request request = new Request.Builder()
-				.url(UPLOAD_URL)
+				.url(GTD_API_URL)
 				.post(requestBody)
 				.build();
 		
@@ -121,31 +167,29 @@ public class AudioUploader {
 		httpClient.newCall(request).enqueue(new Callback() {
 			@Override
 			public void onFailure(Call call, IOException e) {
-				Log.e(TAG, "Upload failed for file: " + audioFile.getName(), e);
-				Timber.e(e, "Upload failed for file: %s", audioFile.getName());
-				String errorMsg = "Upload failed: " + getErrorMessage(e);
-				showToast(context, errorMsg);
+				Timber.e(e, "GTD Assistant request failed");
+				notifyError("Connection failed: " + getErrorMessage(e));
 			}
 			
 			@Override
 			public void onResponse(Call call, Response response) throws IOException {
 				try {
 					if (response.isSuccessful()) {
-						// Extract and log headers
+						// Extract headers
 						String transcription = response.header(HEADER_TRANSCRIPTION, "");
 						String responseText = response.header(HEADER_RESPONSE_TEXT, "");
 						
-						if (!transcription.isEmpty()) {
-							Timber.d("X-Transcription: %s", transcription);
-						}
-						if (!responseText.isEmpty()) {
-							Timber.d("X-Response-Text: %s", responseText);
+						// Notify text response
+						if (listener != null) {
+							mainHandler.post(() -> {
+								listener.onTextResponse(transcription, responseText);
+							});
 						}
 						
 						// Get binary audio response
-						ResponseBody responseBody = response.body();
+						okhttp3.ResponseBody responseBody = response.body();
 						if (responseBody == null) {
-							notifyError(context, "Empty response from server");
+							notifyError("Empty response from server");
 							return;
 						}
 						
@@ -162,19 +206,13 @@ public class AudioUploader {
 						// Server error
 						String errorBody = response.body() != null ? 
 								response.body().string() : "";
-						Timber.e("Upload failed with status %d: %s", 
+						Timber.e("GTD Assistant request failed with status %d: %s", 
 								response.code(), errorBody);
-						showToast(context, "Upload failed: Server error (" + 
-								response.code() + ")");
+						notifyError("Server error (" + response.code() + ")");
 					}
 				} catch (IOException e) {
-					Log.e(TAG, "Error processing response", e);
 					Timber.e(e, "Error processing response");
-					notifyError(context, "Error processing response: " + e.getMessage());
-				} catch (Exception e) {
-					Log.e(TAG, "Unexpected error processing response", e);
-					Timber.e(e, "Unexpected error processing response");
-					notifyError(context, "Unexpected error: " + e.getMessage());
+					notifyError("Error processing response: " + e.getMessage());
 				} finally {
 					if (response.body() != null) {
 						response.body().close();
@@ -186,58 +224,45 @@ public class AudioUploader {
 	
 	/**
 	 * Save audio stream to temporary file and play it
-	 * Ensures file is fully written before starting playback
 	 */
 	private void saveAndPlayAudio(Context context, InputStream audioStream, long contentLength) {
-		// Run file operations in background thread
+		mainHandler.post(() -> notifyProcessing());
+		
+		// Run file operations in background
 		new Thread(() -> {
 			try {
 				// Create temporary file in cache directory
 				File cacheDir = context.getCacheDir();
-				tempAudioFile = File.createTempFile("wariona_reply_", ".mp3", cacheDir);
+				tempAudioFile = File.createTempFile("gtd_response_", ".mp3", cacheDir);
 				
-				Log.d(TAG, "Saving audio response to: " + tempAudioFile.getAbsolutePath());
 				Timber.d("Saving audio response to: %s", tempAudioFile.getAbsolutePath());
 				
-				// Write audio data to file - ensure complete write
+				// Write audio data to file
 				FileOutputStream fos = new FileOutputStream(tempAudioFile);
 				byte[] buffer = new byte[8192];
 				int bytesRead;
 				long totalBytes = 0;
 				
-				try {
-					while ((bytesRead = audioStream.read(buffer)) != -1) {
-						fos.write(buffer, 0, bytesRead);
-						totalBytes += bytesRead;
-					}
-					
-					// Ensure all data is written to disk
-					fos.flush();
-					fos.getFD().sync(); // Force sync to disk for Android 12+ compatibility
-					
-				} finally {
-					fos.close();
-					audioStream.close();
+				while ((bytesRead = audioStream.read(buffer)) != -1) {
+					fos.write(buffer, 0, bytesRead);
+					totalBytes += bytesRead;
 				}
 				
-				// Verify file exists and has content before playing
-				if (!tempAudioFile.exists() || tempAudioFile.length() == 0) {
-					throw new IOException("File was not written correctly");
-				}
+				fos.flush();
+				fos.close();
+				audioStream.close();
 				
-				Log.d(TAG, "Audio saved successfully: " + totalBytes + " bytes");
 				Timber.d("Audio saved: %d bytes", totalBytes);
 				
-				// Play audio on main thread only after file is fully written
+				// Play audio on main thread
 				mainHandler.post(() -> {
-					playAudioFile(context, tempAudioFile);
+					playAudioFile(tempAudioFile);
 				});
 				
 			} catch (IOException e) {
-				Log.e(TAG, "Error saving audio file", e);
 				Timber.e(e, "Error saving audio file");
 				mainHandler.post(() -> {
-					notifyError(context, "Error saving audio: " + e.getMessage());
+					notifyError("Error saving audio: " + e.getMessage());
 				});
 			}
 		}).start();
@@ -245,21 +270,11 @@ public class AudioUploader {
 	
 	/**
 	 * Play audio file using MediaPlayer
-	 * Only starts playback after file is fully prepared
 	 */
-	private void playAudioFile(Context context, File audioFile) {
+	private void playAudioFile(File audioFile) {
 		try {
-			// Verify file exists before attempting playback
-			if (audioFile == null || !audioFile.exists() || audioFile.length() == 0) {
-				Log.e(TAG, "Cannot play: audio file is invalid or empty");
-				notifyError(context, "Invalid audio file");
-				return;
-			}
-			
 			// Stop any existing playback
 			stopPlayback();
-			
-			Log.d(TAG, "Setting up MediaPlayer for file: " + audioFile.getAbsolutePath());
 			
 			// Create and configure MediaPlayer
 			mediaPlayer = new MediaPlayer();
@@ -268,45 +283,33 @@ public class AudioUploader {
 			
 			// Set up completion listener to clean up
 			mediaPlayer.setOnCompletionListener(mp -> {
-				Log.d(TAG, "Audio playback completed");
 				Timber.d("Audio playback completed");
 				cleanup();
-				showToast(context, "Response played");
+				if (listener != null) {
+					listener.onComplete();
+				}
 			});
 			
 			// Set up error listener
 			mediaPlayer.setOnErrorListener((mp, what, extra) -> {
-				Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
 				Timber.e("MediaPlayer error: what=%d, extra=%d", what, extra);
 				cleanup();
-				notifyError(context, "Playback error");
+				notifyError("Playback error");
 				return true;
 			});
 			
-			// Prepare asynchronously - playback starts only after preparation is complete
+			// Prepare and play
 			mediaPlayer.prepareAsync();
 			mediaPlayer.setOnPreparedListener(mp -> {
-				Log.d(TAG, "MediaPlayer prepared, starting playback");
 				Timber.d("Starting audio playback");
-				try {
-					mp.start();
-				} catch (IllegalStateException e) {
-					Log.e(TAG, "Error starting MediaPlayer", e);
-					cleanup();
-					notifyError(context, "Error starting playback");
-				}
+				mp.start();
+				notifySpeaking();
 			});
 			
 		} catch (IOException e) {
-			Log.e(TAG, "Error setting up MediaPlayer", e);
 			Timber.e(e, "Error setting up MediaPlayer");
 			cleanup();
-			notifyError(context, "Playback setup error: " + e.getMessage());
-		} catch (Exception e) {
-			Log.e(TAG, "Unexpected error in playAudioFile", e);
-			Timber.e(e, "Unexpected error in playAudioFile");
-			cleanup();
-			notifyError(context, "Unexpected error: " + e.getMessage());
+			notifyError("Playback setup error: " + e.getMessage());
 		}
 	}
 	
@@ -341,14 +344,7 @@ public class AudioUploader {
 	}
 	
 	/**
-	 * Notify error on main thread
-	 */
-	private void notifyError(Context context, String message) {
-		showToast(context, message);
-	}
-	
-	/**
-	 * Get a user-friendly error message from an exception
+	 * Get user-friendly error message
 	 */
 	private String getErrorMessage(IOException e) {
 		String message = e.getMessage();
@@ -356,7 +352,6 @@ public class AudioUploader {
 			return "Network error";
 		}
 		
-		// Provide more specific error messages
 		if (message.contains("Unable to resolve host")) {
 			return "No internet connection";
 		} else if (message.contains("timeout")) {
@@ -369,12 +364,30 @@ public class AudioUploader {
 	}
 	
 	/**
-	 * Show a Toast message on the main thread
+	 * Notify listener on main thread
 	 */
-	private void showToast(Context context, String message) {
-		mainHandler.post(() -> {
-			Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
-		});
+	private void notifyListening() {
+		if (listener != null) {
+			mainHandler.post(() -> listener.onListening());
+		}
+	}
+	
+	private void notifyProcessing() {
+		if (listener != null) {
+			listener.onProcessing();
+		}
+	}
+	
+	private void notifySpeaking() {
+		if (listener != null) {
+			listener.onSpeaking();
+		}
+	}
+	
+	private void notifyError(String message) {
+		if (listener != null) {
+			mainHandler.post(() -> listener.onError(message));
+		}
 	}
 }
 

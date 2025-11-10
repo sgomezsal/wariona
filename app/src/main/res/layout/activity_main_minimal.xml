@@ -36,6 +36,20 @@
         android:tint="@android:color/black"
         android:alpha="0.5"
         tools:ignore="ContentDescription" />
+    
+    <!-- GTD Mode toggle button - bottom left -->
+    <ImageButton
+        android:id="@+id/btn_gtd_mode"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="16dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/gtd_mode"
+        android:src="@drawable/ic_settings"
+        android:tint="@android:color/black"
+        android:alpha="0.7"
+        tools:ignore="ContentDescription" />
 
     <!-- Recording time display - top center -->
     <TextView
@@ -73,6 +87,40 @@
         android:textSize="16sp"
         android:alpha="0.6"
         tools:text="Tap to record" />
+    
+    <!-- GTD Transcription text (optional, shown when available) -->
+    <TextView
+        android:id="@+id/txt_gtd_transcription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="100dp"
+        android:textColor="@android:color/black"
+        android:textSize="12sp"
+        android:alpha="0.5"
+        android:visibility="gone"
+        android:maxLines="2"
+        android:ellipsize="end"
+        tools:text="You said: Add task to buy groceries" />
+    
+    <!-- GTD Response text (optional, shown when available) -->
+    <TextView
+        android:id="@+id/txt_gtd_response"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="120dp"
+        android:textColor="@android:color/black"
+        android:textSize="12sp"
+        android:alpha="0.7"
+        android:visibility="gone"
+        android:maxLines="2"
+        android:ellipsize="end"
+        tools:text="Assistant: Task added successfully" />
 
 </FrameLayout>
 

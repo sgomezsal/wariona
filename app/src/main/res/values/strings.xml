@@ -295,4 +295,13 @@
 	<string name="enable_button_pattern_service">Enable Button Pattern Detection</string>
 	<string name="button_pattern_service_settings">Button Pattern Service Settings</string>
 	<string name="button_pattern_instructions">To use button pattern recording:\n\n1. Enable the accessibility service\n2. Press volume button (up or down) 4 times quickly (within 2 seconds) to start recording\n3. Press 4 times again to stop recording\n\nThis works even when the app is closed.</string>
+	
+	<!-- GTD Assistant strings -->
+	<string name="gtd_mode">GTD Assistant</string>
+	<string name="gtd_listening">Listening…</string>
+	<string name="gtd_processing">Processing…</string>
+	<string name="gtd_speaking">Speaking…</string>
+	<string name="gtd_tap_to_talk">Tap to talk to GTD Assistant</string>
+	<string name="gtd_transcription">You said:</string>
+	<string name="gtd_response">Assistant:</string>
 </resources>
