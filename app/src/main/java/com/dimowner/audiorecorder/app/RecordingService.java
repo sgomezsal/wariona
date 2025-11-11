@@ -150,18 +150,23 @@ public class RecordingService extends Service {
 				// ===== AUTOMATIC FILE UPLOAD AND PLAYBACK =====
 				// Send the recorded file to Wariona backend and play the response
 				// Uses Kotlin coroutines for async operations (Dispatchers.IO)
+				// The playback callback will handle conversation continuation automatically
 				if (file != null && file.exists()) {
 					// Use WarionaAudioPlayer with coroutines for better async handling
 					WarionaAudioPlayer.INSTANCE.sendAndPlayAudioAsync(getApplicationContext(), file);
+					// Don't stop the service yet - wait for playback completion callback
+					// The callback will decide whether to continue or stop based on X-Continue-Conversation header
 				} else {
 					Timber.w("Recording stopped but file is null or doesn't exist");
+					stopForegroundService();
 				}
 				// ===== END AUTOMATIC FILE UPLOAD AND PLAYBACK =====
 				
 				if (rec != null && rec.getDuration()/1000 < AppConstants.DECODE_DURATION && !rec.isWaveformProcessed()) {
 					DecodeService.Companion.startNotification(getApplicationContext(), rec.getId());
 				}
-				stopForegroundService();
+				// Note: stopForegroundService() is now called from the playback callback
+				// if the conversation should not continue (X-Continue-Conversation: false)
 			}
 
 			@Override
@@ -210,6 +215,43 @@ public class RecordingService extends Service {
 			}
 		};
 		appRecorder.addRecordingCallback(appRecorderCallback);
+		
+		// Set up Wariona playback callback for multi-turn conversation support
+		WarionaAudioPlayer.INSTANCE.setPlaybackCallback(new WarionaPlaybackCallback() {
+			@Override
+			public void onPlaybackCompleted(boolean shouldContinue) {
+				Timber.d("Playback completed. Should continue conversation: %s", shouldContinue);
+				
+				if (shouldContinue) {
+					// Automatically restart recording for next turn in conversation
+					AndroidUtils.runOnUIThread(() -> {
+						Toast.makeText(getApplicationContext(), 
+								R.string.wariona_listening_clarification, 
+								Toast.LENGTH_SHORT).show();
+					});
+					
+					// Ensure service is still running (may have been stopped after previous recording)
+					if (!started) {
+						startForegroundService();
+					}
+					
+					// Start a new recording session
+					try {
+						String path = fileRepository.provideRecordFile().getAbsolutePath();
+						Timber.d("Starting new recording for conversation continuation: %s", path);
+						startRecording(path);
+					} catch (CantCreateFileException e) {
+						Timber.e(e, "Failed to start recording for conversation continuation");
+						showError(ErrorParser.parseException(e));
+						stopForegroundService();
+					}
+				} else {
+					// Conversation ended normally - stop the service
+					Timber.d("Conversation ended normally");
+					stopForegroundService();
+				}
+			}
+		});
 	}
 
 	public void showNoSpaceNotification() {
@@ -412,6 +454,8 @@ public class RecordingService extends Service {
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
+		// Clear callback to prevent memory leaks
+		WarionaAudioPlayer.INSTANCE.setPlaybackCallback(null);
 		// Clean up Wariona audio player
 		WarionaAudioPlayer.INSTANCE.cleanup();
 	}

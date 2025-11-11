@@ -27,6 +27,17 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
+ * Callback interface for handling playback completion and conversation continuation.
+ */
+interface WarionaPlaybackCallback {
+    /**
+     * Called when audio playback completes.
+     * @param shouldContinue true if the backend signaled to continue the conversation (X-Continue-Conversation: true)
+     */
+    fun onPlaybackCompleted(shouldContinue: Boolean)
+}
+
+/**
  * Kotlin-based audio player for Wariona backend responses.
  * Uses coroutines for async file I/O operations.
  */
@@ -36,6 +47,7 @@ object WarionaAudioPlayer {
     private const val API_URL = "http://65.21.54.108:8000/talk"
     private const val HEADER_TRANSCRIPTION = "X-Transcription"
     private const val HEADER_RESPONSE_TEXT = "X-Response-Text"
+    private const val HEADER_CONTINUE_CONVERSATION = "X-Continue-Conversation"
     
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -47,6 +59,15 @@ object WarionaAudioPlayer {
     
     private var currentPlayer: MediaPlayer? = null
     private var currentTempFile: File? = null
+    private var playbackCallback: WarionaPlaybackCallback? = null
+    private var shouldContinueConversation: Boolean = false
+    
+    /**
+     * Set callback for playback completion events.
+     */
+    fun setPlaybackCallback(callback: WarionaPlaybackCallback?) {
+        playbackCallback = callback
+    }
     
     /**
      * Send audio file to Wariona backend and play the response.
@@ -87,12 +108,21 @@ object WarionaAudioPlayer {
             val transcription = response.header(HEADER_TRANSCRIPTION)
             val responseText = response.header(HEADER_RESPONSE_TEXT)
             
+            // Check for conversation continuation header
+            val continueHeader = response.header(HEADER_CONTINUE_CONVERSATION)
+            shouldContinueConversation = continueHeader?.equals("true", ignoreCase = true) == true
+            
             // Safely handle nullable header values
             if (!transcription.isNullOrEmpty()) {
                 Log.d(TAG, "X-Transcription: $transcription")
             }
             if (!responseText.isNullOrEmpty()) {
                 Log.d(TAG, "X-Response-Text: $responseText")
+            }
+            if (shouldContinueConversation) {
+                Log.d(TAG, "X-Continue-Conversation: true - Conversation will continue after playback")
+            } else {
+                Log.d(TAG, "X-Continue-Conversation: false - Conversation will end after playback")
             }
             
             // Get response body
@@ -196,9 +226,21 @@ object WarionaAudioPlayer {
                 setAudioStreamType(AudioManager.STREAM_MUSIC)
                 setDataSource(audioPath)
                 
-                // Set up completion listener to clean up
+                // Set up completion listener to clean up and notify callback
                 setOnCompletionListener {
-                    Log.d(TAG, "Audio playback completed")
+                    Log.d(TAG, "Audio playback completed. Continue conversation: $shouldContinueConversation")
+                    
+                    // Notify callback about playback completion and continuation status
+                    val callback = playbackCallback
+                    if (callback != null) {
+                        try {
+                            callback.onPlaybackCompleted(shouldContinueConversation)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error in playback callback", e)
+                        }
+                    }
+                    
+                    // Clean up resources (but don't reset shouldContinueConversation yet)
                     cleanup()
                 }
                 
@@ -263,6 +305,9 @@ object WarionaAudioPlayer {
             }
             currentTempFile = null
         }
+        
+        // Reset continuation flag after cleanup
+        shouldContinueConversation = false
     }
     
     /**

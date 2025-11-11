@@ -1,5 +1,5 @@
 <resources>
-	<string name="app_name">Audio Recorder</string>
+	<string name="app_name">Wariona</string>
 
 	<string name="records">Records</string>
 	<string name="settings">Settings</string>
@@ -304,4 +304,8 @@
 	<string name="gtd_tap_to_talk">Tap to talk to GTD Assistant</string>
 	<string name="gtd_transcription">You said:</string>
 	<string name="gtd_response">Assistant:</string>
+	
+	<!-- Multi-turn conversation strings -->
+	<string name="wariona_listening_clarification">Wariona is listening for your clarification…</string>
+	<string name="wariona_thinking">Wariona is thinking…</string>
 </resources>
