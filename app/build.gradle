@@ -108,6 +108,9 @@ dependencies {
 	//OkHttp for HTTP requests
 	implementation "com.squareup.okhttp3:okhttp:4.12.0"
 
+	// Picovoice Porcupine wake word SDK
+	implementation "ai.picovoice:porcupine-android:3.0.2"
+
 	testImplementation("junit:junit:4.13.2")
 	testImplementation("io.mockk:mockk:1.13.10")
 

@@ -16,7 +16,6 @@
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
         android:minSdkVersion="33" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -110,6 +109,10 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
         <service
+            android:name=".app.wakeword.AriWakeWordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
             android:name=".app.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
@@ -137,12 +140,15 @@
                 android:resource="@xml/button_pattern_service_config" />
         </service>
 
-        <receiver android:name=".WidgetReceiver" />
-        <receiver android:name=".app.RecordingService$StopRecordingReceiver" />
-        <receiver android:name=".app.PlaybackService$StopPlaybackReceiver" />
-        <receiver android:name=".app.DownloadService$StopDownloadReceiver" />
-        <receiver android:name=".app.DecodeService$StopDecodeReceiver" />
-        <receiver android:name=".app.moverecords.MoveRecordsService$StopMoveRecordsReceiver" />
+        <!-- BroadcastReceivers for internal app communication -->
+        <!-- android:exported="false" means these receivers are only accessible within the app -->
+        <!-- This is required for security and is the default behavior for internal receivers -->
+        <receiver android:name=".WidgetReceiver" android:exported="false" />
+        <receiver android:name=".app.RecordingService$StopRecordingReceiver" android:exported="false" />
+        <receiver android:name=".app.PlaybackService$StopPlaybackReceiver" android:exported="false" />
+        <receiver android:name=".app.DownloadService$StopDownloadReceiver" android:exported="false" />
+        <receiver android:name=".app.DecodeService$StopDecodeReceiver" android:exported="false" />
+        <receiver android:name=".app.moverecords.MoveRecordsService$StopMoveRecordsReceiver" android:exported="false" />
 
         <provider
             android:name=".AppFileProvider"

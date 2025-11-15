@@ -16,6 +16,7 @@
 
 package com.dimowner.audiorecorder.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -25,6 +26,7 @@ import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.media.RingtoneManager;
@@ -81,6 +83,9 @@ public class RecordingService extends Service {
 	public static final String ACTION_PAUSE_RECORDING = "ACTION_PAUSE_RECORDING";
 	public static final String ACTION_TOGGLE_RECORDING = "ACTION_TOGGLE_RECORDING";
 
+	public static final String ACTION_RECORDING_STARTED_BROADCAST = "com.dimowner.audiorecorder.app.ACTION_RECORDING_STARTED";
+	public static final String ACTION_RECORDING_STOPPED_BROADCAST = "com.dimowner.audiorecorder.app.ACTION_RECORDING_STOPPED";
+
 	private static final int NOTIF_ID = 101;
 	private NotificationManager notificationManager;
 	private RemoteViews remoteViewsSmall;
@@ -132,6 +137,7 @@ public class RecordingService extends Service {
 				// Enable silence detection when recording starts
 				silenceDetector.enable();
 				updateNotificationResume();
+				sendRecordingStateBroadcast(ACTION_RECORDING_STARTED_BROADCAST);
 			}
 			@Override public void onRecordingPaused() {
 				// Reset silence detector on pause
@@ -167,6 +173,7 @@ public class RecordingService extends Service {
 				}
 				// Note: stopForegroundService() is now called from the playback callback
 				// if the conversation should not continue (X-Continue-Conversation: false)
+				sendRecordingStateBroadcast(ACTION_RECORDING_STOPPED_BROADCAST);
 			}
 
 			@Override
@@ -313,26 +320,84 @@ public class RecordingService extends Service {
 		return super.onStartCommand(intent, flags, startId);
 	}
 
+	/**
+	 * Toggles recording state. Includes comprehensive error handling to prevent crashes.
+	 * This method is called from wake word detection and button pattern triggers.
+	 */
 	private void toggleRecording() {
-		if (appRecorder.isRecording()) {
-			// Stop recording
-			stopRecording();
-		} else {
-			// Start recording
-			if (!started) {
-				startForegroundService();
-			}
-			try {
-				String path = fileRepository.provideRecordFile().getAbsolutePath();
-				startRecording(path);
-			} catch (CantCreateFileException e) {
-				Timber.e(e, "Failed to start recording from button pattern");
-				showError(ErrorParser.parseException(e));
-				if (started) {
-					stopForegroundService();
+		try {
+			if (appRecorder.isRecording()) {
+				// Stop recording
+				Timber.d("Stopping recording via toggle");
+				stopRecording();
+			} else {
+				// Start recording
+				Timber.d("Starting recording via toggle");
+				
+				// Verify microphone permission before attempting to start
+				if (!hasRecordAudioPermission()) {
+					Timber.e("RECORD_AUDIO permission not granted - cannot start recording");
+					AndroidUtils.runOnUIThread(() -> {
+						Toast.makeText(
+							getApplicationContext(),
+							"Microphone permission required to record",
+							Toast.LENGTH_LONG
+						).show();
+					});
+					return;
+				}
+				
+				// Ensure foreground service is running
+				if (!started) {
+					try {
+						startForegroundService();
+					} catch (Exception e) {
+						Timber.e(e, "Failed to start foreground service");
+						showError(R.string.error_failed_to_start_recording);
+						return;
+					}
+				}
+				
+				// Start recording with error handling
+				try {
+					String path = fileRepository.provideRecordFile().getAbsolutePath();
+					Timber.d("Starting recording with path: %s", path);
+					startRecording(path);
+				} catch (CantCreateFileException e) {
+					Timber.e(e, "Failed to create recording file");
+					showError(ErrorParser.parseException(e));
+					if (started) {
+						stopForegroundService();
+					}
+				} catch (Exception e) {
+					Timber.e(e, "Unexpected error starting recording");
+					showError(R.string.error_failed_to_start_recording);
+					if (started) {
+						stopForegroundService();
+					}
 				}
 			}
+		} catch (Exception e) {
+			Timber.e(e, "Critical error in toggleRecording - preventing crash");
+			AndroidUtils.runOnUIThread(() -> {
+				Toast.makeText(
+					getApplicationContext(),
+					"Error toggling recording: " + e.getMessage(),
+					Toast.LENGTH_LONG
+				).show();
+			});
 		}
+	}
+
+	/**
+	 * Checks if RECORD_AUDIO permission is granted.
+	 */
+	private boolean hasRecordAudioPermission() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			return checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+					PackageManager.PERMISSION_GRANTED;
+		}
+		return true; // Permission granted by default on older Android versions
 	}
 
 	private void stopRecording() {
@@ -542,43 +607,120 @@ public class RecordingService extends Service {
 		}
 	}
 
+	/**
+	 * Starts recording with comprehensive error handling.
+	 * This method ensures:
+	 * 1. Microphone is not already in use
+	 * 2. Sufficient storage space is available
+	 * 3. All exceptions are caught and handled gracefully
+	 * 4. User receives clear error messages
+	 */
 	private void startRecording(String path) {
-		appRecorder.setRecorder(recorder);
 		try {
-			if (fileRepository.hasAvailableSpace(getApplicationContext())) {
-//				if (appRecorder.isPaused()) {
-//					appRecorder.resumeRecording();
-//				} else
-				if (!appRecorder.isRecording()) {
-					if (audioPlayer.isPlaying() || audioPlayer.isPaused()) {
-						audioPlayer.stop();
-					}
-					recordingsTasks.postRunnable(() -> {
-						try {
-							Record record = localRepository.insertEmptyFile(path);
-							prefs.setActiveRecord(record.getId());
-							recordDataSource.setRecordingRecord(record);
-							AndroidUtils.runOnUIThread(() -> appRecorder.startRecording(
-									path,
-									prefs.getSettingChannelCount(),
-									prefs.getSettingSampleRate(),
-									prefs.getSettingBitrate()
-							));
-						} catch (IOException | OutOfMemoryError | IllegalStateException | NullPointerException e) {
-							Timber.e(e);
-							showError(R.string.error_failed_to_start_recording);
-						}
-					});
-				}
-//				else {
-//					appRecorder.pauseRecording();
-//				}
-			} else {
+			// Verify recorder is set
+			if (recorder == null) {
+				Timber.e("Recorder is null - cannot start recording");
+				showError(R.string.error_failed_to_init_recorder);
+				stopForegroundService();
+				return;
+			}
+			
+			appRecorder.setRecorder(recorder);
+			
+			// Check if already recording (double-check to prevent conflicts)
+			if (appRecorder.isRecording()) {
+				Timber.w("Recording already in progress - ignoring start request");
+				return;
+			}
+			
+			// Verify storage space
+			if (!fileRepository.hasAvailableSpace(getApplicationContext())) {
+				Timber.e("Insufficient storage space");
 				showError(R.string.error_no_available_space);
 				stopForegroundService();
+				return;
 			}
+			
+			// Stop any active playback to free audio resources
+			try {
+				if (audioPlayer.isPlaying() || audioPlayer.isPaused()) {
+					audioPlayer.stop();
+					Timber.d("Stopped audio playback before starting recording");
+				}
+			} catch (Exception e) {
+				Timber.w(e, "Error stopping audio player (non-critical)");
+			}
+			
+			// Start recording in background thread with comprehensive error handling
+			recordingsTasks.postRunnable(() -> {
+				try {
+					// Create database record
+					Record record = localRepository.insertEmptyFile(path);
+					prefs.setActiveRecord(record.getId());
+					recordDataSource.setRecordingRecord(record);
+					
+					// Start recording on UI thread (required for MediaRecorder)
+					AndroidUtils.runOnUIThread(() -> {
+						try {
+							appRecorder.startRecording(
+								path,
+								prefs.getSettingChannelCount(),
+								prefs.getSettingSampleRate(),
+								prefs.getSettingBitrate()
+							);
+							Timber.d("Recording started successfully");
+						} catch (IllegalStateException e) {
+							// Handle case where microphone is already in use
+							Timber.e(e, "Microphone may be in use by another app");
+							showError(R.string.error_failed_to_start_recording);
+							stopForegroundService();
+						} catch (SecurityException e) {
+							// Handle permission issues
+							Timber.e(e, "Microphone permission denied or revoked");
+							showError(R.string.error_permission_denied);
+							stopForegroundService();
+						} catch (RuntimeException e) {
+							// Handle other runtime errors (e.g., MediaRecorder initialization failures)
+							Timber.e(e, "Runtime error starting recording");
+							showError(R.string.error_failed_to_start_recording);
+							stopForegroundService();
+						} catch (Exception e) {
+							// Catch any other unexpected errors
+							Timber.e(e, "Unexpected error starting recording");
+							showError(R.string.error_failed_to_start_recording);
+							stopForegroundService();
+						}
+					});
+				} catch (IOException e) {
+					Timber.e(e, "IO error creating recording file");
+					showError(R.string.error_failed_to_start_recording);
+					stopForegroundService();
+				} catch (OutOfMemoryError e) {
+					Timber.e(e, "Out of memory error");
+					showError(R.string.error_failed_to_start_recording);
+					stopForegroundService();
+				} catch (IllegalStateException e) {
+					Timber.e(e, "Illegal state error");
+					showError(R.string.error_failed_to_start_recording);
+					stopForegroundService();
+				} catch (NullPointerException e) {
+					Timber.e(e, "Null pointer exception");
+					showError(R.string.error_failed_to_start_recording);
+					stopForegroundService();
+				} catch (Exception e) {
+					Timber.e(e, "Unexpected error in recording task");
+					showError(R.string.error_failed_to_start_recording);
+					stopForegroundService();
+				}
+			});
+			
 		} catch (IllegalArgumentException e) {
+			Timber.e(e, "Invalid argument in startRecording");
 			showError(R.string.error_failed_access_to_storage);
+			stopForegroundService();
+		} catch (Exception e) {
+			Timber.e(e, "Critical error in startRecording - preventing crash");
+			showError(R.string.error_failed_to_start_recording);
 			stopForegroundService();
 		}
 	}
@@ -594,5 +736,11 @@ public class RecordingService extends Service {
 			stopIntent.setAction(intent.getAction());
 			context.startService(stopIntent);
 		}
+	}
+
+	private void sendRecordingStateBroadcast(String action) {
+		Intent intent = new Intent(action);
+		intent.setPackage(getPackageName());
+		sendBroadcast(intent);
 	}
 }

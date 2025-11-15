@@ -57,7 +57,8 @@
  	<string name="dont_ask_again">No preguntar nuevamente</string>
  	<string name="open_with">Abrir con&#8230;</string>
  	<string name="downloading">Descargando: %s</string>
- 	<string name="downloading_success_and_fail_count">%d grabaciones descargadas exitosamente y %d fallaron al descargar</string>
+ 	<string name="downloading_success_and_fail_count" formatted="false">%1$d grabaciones descargadas exitosamente y %2$d fallaron al descargar</string>
+ 	<string name="moving_records_success_and_fail_count" formatted="false">%1$d grabaciones movidas exitosamente y %2$d fallaron al mover</string>
  	<string name="downloading_success">%s descargado al directorio de Descargas</string>
  	<string name="downloading_failed">Falló al descargar: %s</string>
  	<string name="downloading_cancel">Descarga cancelada</string>

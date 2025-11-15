@@ -79,8 +79,8 @@
 		<item quantity="one">%d record moved successfully</item>
 		<item quantity="other">%d records moved successfully</item>
 	</plurals>
-	<string name="downloading_success_and_fail_count">%d records copied successfully and %d failed to copy</string>
-	<string name="moving_records_success_and_fail_count">%d records moved successfully and %d failed to move</string>
+	<string name="downloading_success_and_fail_count" formatted="false">%1$d records copied successfully and %2$d failed to copy</string>
+	<string name="moving_records_success_and_fail_count" formatted="false">%1$d records moved successfully and %2$d failed to move</string>
 	<string name="downloading_success">%s copied to the \'Downloads\' directory</string>
 	<string name="move_record_success">%s moved to the app\'s private directory</string>
 	<plurals name="downloading_failed_count">
@@ -304,6 +304,15 @@
 	<string name="gtd_tap_to_talk">Tap to talk to GTD Assistant</string>
 	<string name="gtd_transcription">You said:</string>
 	<string name="gtd_response">Assistant:</string>
+    
+    <!-- Wake word service strings -->
+    <string name="wake_word_service_title">Wariona Wake Word</string>
+    <string name="wake_word_listening_status">Listening for “Hey Ari”</string>
+    <string name="wake_word_paused_status">Wake detection paused</string>
+    <string name="wake_word_detected_status">Listening for your command…</string>
+    <string name="wake_word_detected_toast">Listening…</string>
+    <string name="wake_word_notification_channel">Wake Word Detection</string>
+    <string name="wake_word_initialization_error">Wake word detection unavailable</string>
 	
 	<!-- Multi-turn conversation strings -->
 	<string name="wariona_listening_clarification">Wariona is listening for your clarification…</string>

@@ -38,6 +38,9 @@ import com.dimowner.audiorecorder.util.TimeUtils;
 import java.io.File;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+
+import com.dimowner.audiorecorder.app.wakeword.AriWakeWordService;
 
 public class MainActivityMinimal extends Activity implements MainContract.View {
 
@@ -205,6 +208,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 
 		// Request permissions if needed
 		checkPermissions();
+		startWakeWordServiceIfReady();
 	}
 
 	@Override
@@ -218,6 +222,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 		presenter.setAudioRecorder(ARApplication.getInjector().provideAudioRecorder(getApplicationContext()));
 		presenter.updateRecordingDir(getApplicationContext());
 		presenter.loadActiveRecord();
+		startWakeWordServiceIfReady();
 	}
 
 	@Override
@@ -286,6 +291,7 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 				return false;
 			}
 		}
+		startWakeWordServiceIfReady();
 		return true;
 	}
 
@@ -328,13 +334,25 @@ public class MainActivityMinimal extends Activity implements MainContract.View {
 			if (checkStoragePermission()) {
 				startRecordingService();
 			}
+			startWakeWordServiceIfReady();
 		} else if (requestCode == REQ_CODE_WRITE_EXTERNAL_STORAGE && grantResults.length > 0
 				&& grantResults[0] == PackageManager.PERMISSION_GRANTED
 				&& grantResults[1] == PackageManager.PERMISSION_GRANTED) {
 			if (checkRecordPermission()) {
 				startRecordingService();
 			}
+			startWakeWordServiceIfReady();
 		}
+	}
+
+	private void startWakeWordServiceIfReady() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+				return;
+			}
+		}
+		Intent intent = new Intent(getApplicationContext(), AriWakeWordService.class);
+		ContextCompat.startForegroundService(getApplicationContext(), intent);
 	}
 
 	// MainContract.View implementation
